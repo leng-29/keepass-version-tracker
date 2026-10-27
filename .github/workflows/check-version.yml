@@ -3,22 +3,55 @@ name: Track KeePass Version
 on:
   schedule:
     - cron: '0 0 * * *' # Checks every day at midnight
-  workflow_dispatch: # Allows you to run it manually
+  workflow_dispatch: # Allows manual trigger
 
 jobs:
   check-version:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch Latest KeePass Classic Version
-        id: get_version
-        run: |
-          VERSION=$(curl -s https://keepass.info | grep -oE "KeePass [0-9]+\.[0-9]+(\.[0-9]+)?" | head -n 1)
-          echo "CURRENT_VERSION=$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Found Version: $VERSION"
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Send Notification to Mattermost
+      - name: Fetch Latest KeePass Version
+        id: fetch
         run: |
-          curl -i -X POST -H 'Content-Type: application/json' \
-            -d "{\"text\": \"🔔 **KeePass Update Detected:** Official website is now listing version **$VERSION**\"}" \
-            https://chat.sabay.com/hooks/jrqhrmuj1inrbqihxrufc71f3e
+          # Extract exact version string (e.g., "KeePass 2.61.1")
+          NEW_VERSION=$(curl -s https://keepass.info | grep -oE "KeePass [0-9]+\.[0-9]+(\.[0-9]+)*" | head -n 1)
+          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
+          echo "Latest version found: $NEW_VERSION"
+
+      - name: Restore Previous Version State
+        uses: actions/cache/restore@v4
+        with:
+          path: last_version.txt
+          key: keepass-version-state
+
+      - name: Compare Versions & Send Notification
+        run: |
+          OLD_VERSION=""
+          if [ -f last_version.txt ]; then
+            OLD_VERSION=$(cat last_version.txt)
+          fi
+
+          echo "Previous recorded version: '$OLD_VERSION'"
+          echo "Current detected version:  '$NEW_VERSION'"
+
+          if [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
+            echo "New version detected! Sending notification..."
+            
+            curl -i -X POST -H 'Content-Type: application/json' \
+              -d "{\"text\": \"🔔 **New KeePass Update Available:** Official website is now listing **$NEW_VERSION**\"}" \
+              https://chat.sabay.com/hooks/jrqhrmuj1inrbqihxrufc71f3e
+
+            # Update the stored version file
+            echo "$NEW_VERSION" > last_version.txt
+          else
+            echo "No new version found. Staying silent."
+          fi
+
+      - name: Save Updated Version State
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: last_version.txt
+          key: keepass-version-state-${{ github.run_id }}
