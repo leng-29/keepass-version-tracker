@@ -40,10 +40,7 @@ jobs:
           if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
             echo "New version detected! Sending notification..."
             
-            # Real newlines inside double quotes for proper Mattermost line breaks
-            MESSAGE="🔔 **New KeePass Update Available:** Official website is now listing **$NEW_VERSION**
-
-📥 [Download KeePass here](https://keepass.info/download.html)"
+            MESSAGE=$(printf "🔔 **New KeePass Update Available:** Official website is now listing **%s**\n\n📥 [Download KeePass here](https://keepass.info/download.html)" "$NEW_VERSION")
 
             curl -i -X POST -H 'Content-Type: application/json' \
               -d "$(jq -n --arg msg "$MESSAGE" '{text: $msg}')" \
