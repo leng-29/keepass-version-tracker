@@ -2,8 +2,8 @@ name: Track KeePass Version
 
 on:
   schedule:
-    - cron: '0 0 * * *' # Checks every day at midnight
-  workflow_dispatch: # Allows manual trigger
+    - cron: '0 0 * * *'
+  workflow_dispatch:
 
 jobs:
   check-version:
@@ -15,9 +15,9 @@ jobs:
       - name: Fetch Latest KeePass Version
         id: fetch
         run: |
-          NEW_VERSION=$(curl -s https://keepass.info | grep -oE "KeePass [0-9]+\.[0-9]+(\.[0-9]+)*" | head -n 1)
-          echo "NEW_VERSION=$NEW_VERSION" >> $GITHUB_ENV
-          echo "Latest version found: $NEW_VERSION"
+          VERSION=$(curl -s https://keepass.info | grep -oE "KeePass [0-9]+\.[0-9]+(\.[0-9]+)*" | head -n 1)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Latest version found: $VERSION"
 
       - name: Restore Previous Version State
         uses: actions/cache/restore@v4
@@ -27,7 +27,9 @@ jobs:
 
       - name: Compare Versions & Send Notification
         run: |
+          NEW_VERSION="${{ steps.fetch.outputs.version }}"
           OLD_VERSION=""
+
           if [ -f last_version.txt ]; then
             OLD_VERSION=$(cat last_version.txt)
           fi
@@ -35,11 +37,13 @@ jobs:
           echo "Previous recorded version: '$OLD_VERSION'"
           echo "Current detected version:  '$NEW_VERSION'"
 
-          if [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
+          if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
             echo "New version detected! Sending notification..."
             
-            # Format message with direct link to the official downloads page
-            MESSAGE="🔔 **New KeePass Update Available:** Official website is now listing **$NEW_VERSION**\n\n📥 [Download KeePass here](https://keepass.info/download.html)"
+            # Real newlines inside double quotes for proper Mattermost line breaks
+            MESSAGE="🔔 **New KeePass Update Available:** Official website is now listing **$NEW_VERSION**
+
+📥 [Download KeePass here](https://keepass.info/download.html)"
 
             curl -i -X POST -H 'Content-Type: application/json' \
               -d "$(jq -n --arg msg "$MESSAGE" '{text: $msg}')" \
@@ -47,7 +51,7 @@ jobs:
 
             echo "$NEW_VERSION" > last_version.txt
           else
-            echo "No new version found. Staying silent."
+            echo "No new version found or invalid version string. Staying silent."
           fi
 
       - name: Save Updated Version State
