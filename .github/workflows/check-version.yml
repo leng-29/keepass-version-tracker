@@ -8,6 +8,8 @@ on:
 jobs:
   check-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Allows the workflow to commit the updated version file
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -18,12 +20,6 @@ jobs:
           VERSION=$(curl -s https://keepass.info | grep -oE "KeePass [0-9]+\.[0-9]+(\.[0-9]+)*" | head -n 1)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Latest version found: $VERSION"
-
-      - name: Restore Previous Version State
-        uses: actions/cache/restore@v4
-        with:
-          path: last_version.txt
-          key: keepass-version-state
 
       - name: Compare Versions & Send Notification
         run: |
@@ -37,6 +33,8 @@ jobs:
           echo "Previous recorded version: '$OLD_VERSION'"
           echo "Current detected version:  '$NEW_VERSION'"
 
+          # Change 'false' back to your check once you are done testing:
+          # If you want to test right now, you can leave it as 'true'
           if [ -n "$NEW_VERSION" ] && [ "$NEW_VERSION" != "$OLD_VERSION" ]; then
             echo "New version detected! Sending notification..."
             
@@ -46,14 +44,15 @@ jobs:
               -d "$(jq -n --arg msg "$MESSAGE" '{text: $msg}')" \
               https://chat.sabay.com/hooks/jrqhrmuj1inrbqihxrufc71f3e
 
+            # Save new version to file
             echo "$NEW_VERSION" > last_version.txt
+
+            # Configure git and push the updated file back to repo
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add last_version.txt
+            git commit -m "chore: update tracked keepass version to $NEW_VERSION"
+            git push
           else
             echo "No new version found or invalid version string. Staying silent."
           fi
-
-      - name: Save Updated Version State
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: last_version.txt
-          key: keepass-version-state-${{ github.run_id }}
